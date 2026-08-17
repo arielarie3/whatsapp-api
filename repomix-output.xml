@@ -1,0 +1,1834 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: **/*.cs, **/*.csproj, **/appsettings*.json, **/*.sln
+- Files matching these patterns are excluded: **/bin/**, **/obj/**, **/.vs/**, **/.git/**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+appsettings.Development.json
+appsettings.json
+Controllers/AuthController.cs
+Controllers/MessagesController.cs
+Controllers/UsersController.cs
+Data/DataContext.cs
+DTOs/CreateMessageDto.cs
+DTOs/FileUploadDto.cs
+DTOs/LoginDto.cs
+DTOs/MessageDto.cs
+DTOs/MessageResponseDto.cs
+DTOs/RegisterDto.cs
+DTOs/SendMessageDto.cs
+DTOs/UserResponseDto.cs
+Hubs/ChatHub.cs
+Migrations/20260721111227_InitialCreate.cs
+Migrations/20260721111227_InitialCreate.Designer.cs
+Migrations/20260727212459_AddFileFieldsToMessage.cs
+Migrations/20260727212459_AddFileFieldsToMessage.Designer.cs
+Migrations/DataContextModelSnapshot.cs
+Models/Message.cs
+Models/User.cs
+Program.cs
+Repositories/IMessageRepository.cs
+Repositories/IUserRepository.cs
+Repositories/MessageRepository.cs
+Repositories/UserRepository.cs
+Services/AuthService.cs
+Services/FileService.cs
+Services/IAuthService.cs
+Services/IFileService.cs
+Services/IMessageService.cs
+Services/ITokenService.cs
+Services/MessageService.cs
+Services/TokenService.cs
+WeatherForecast.cs
+WhatsappWeb.Api.csproj
+WhatsappWeb.Api.sln
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="appsettings.Development.json">
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}
+</file>
+
+<file path="appsettings.json">
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "TokenKey": "this_is_a_super_secret_jwt_key_that_is_at_least_64_bytes_long_for_hmac_sha512_security!"
+}
+</file>
+
+<file path="Controllers/AuthController.cs">
+using Microsoft.AspNetCore.Mvc;
+using WhatsappWeb.Api.DTOs;
+using WhatsappWeb.Api.Services;
+
+namespace WhatsappWeb.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AuthController : ControllerBase
+    {
+        private readonly IAuthService _authService;
+
+        public AuthController(IAuthService authService)
+        {
+            _authService = authService;
+        }
+
+        [HttpPost("register")]
+        public async Task<ActionResult<UserResponseDto>> Register(RegisterDto registerDto)
+        {
+            var result = await _authService.RegisterAsync(registerDto);
+
+            if (result == null)
+            {
+                return BadRequest("מספר הטלפון כבר קיים במערכת");
+            }
+
+            return Ok(result);
+        }
+
+        [HttpPost("login")]
+        public async Task<ActionResult<UserResponseDto>> Login(LoginDto loginDto)
+        {
+            var result = await _authService.LoginAsync(loginDto);
+
+            if (result == null)
+            {
+                return Unauthorized("מספר טלפון או סיסמה שגויים.");
+            }
+
+            return Ok(result);
+        }
+    }
+}
+</file>
+
+<file path="Controllers/MessagesController.cs">
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using WhatsappWeb.Api.DTOs;
+using WhatsappWeb.Api.Services;
+
+namespace WhatsappWeb.Api.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class MessagesController : ControllerBase
+    {
+        private readonly IMessageService _messageService;
+
+        public MessagesController(IMessageService messageService)
+        {
+            _messageService = messageService;
+        }
+
+        // שליחת הודעת טקסט
+        [HttpPost]
+        public async Task<ActionResult<MessageResponseDto>> SendMessage(CreateMessageDto createDto)
+        {
+            var senderId = GetCurrentUserId();
+            if (senderId == null) return Unauthorized();
+
+            var result = await _messageService.SendTextMessageAsync(senderId.Value, createDto);
+            if (result == null) return BadRequest("הנמען לא נמצא או ששליחת ההודעה נכשלה.");
+
+            return Ok(result);
+        }
+
+        // שליחת קובץ בצ'אט
+        [HttpPost("upload")]
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult<MessageResponseDto>> UploadFile([FromForm] FileUploadDto dto)
+        {
+            var senderId = GetCurrentUserId();
+            if (senderId == null) return Unauthorized();
+
+            try
+            {
+                var result = await _messageService.SendFileAsync(senderId.Value, dto);
+                if (result == null) return BadRequest("הנמען לא נמצא או ששמירת הקובץ נכשלה.");
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // שליפת היסטוריית שיחה
+        [HttpGet("chat/{otherUserId}")]
+        public async Task<ActionResult<IEnumerable<MessageResponseDto>>> GetChatHistory(Guid otherUserId)
+        {
+            var currentUserId = GetCurrentUserId();
+            if (currentUserId == null) return Unauthorized();
+
+            var messages = await _messageService.GetChatHistoryAsync(currentUserId.Value, otherUserId);
+            return Ok(messages);
+        }
+
+        private Guid? GetCurrentUserId()
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return Guid.TryParse(userIdStr, out var userId) ? userId : null;
+        }
+    }
+}
+</file>
+
+<file path="Controllers/UsersController.cs">
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using WhatsappWeb.Api.DTOs;
+using WhatsappWeb.Api.Hubs;
+using WhatsappWeb.Api.Repositories;
+
+namespace WhatsappWeb.Api.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class UsersController : ControllerBase
+    {
+        private readonly IUserRepository _userRepository;
+
+        public UsersController(IUserRepository userRepository)
+        {
+            _userRepository = userRepository;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<UserResponseDto>>> GetUsers()
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var users = await _userRepository.GetAllAsync();
+
+            var userDtos = users
+                .Where(u => u.Id.ToString() != currentUserId)
+                .Select(u => new UserResponseDto
+                {
+                    Id = u.Id,
+                    PhoneNumber = u.PhoneNumber,
+                    DisplayName = u.DisplayName,
+                    ProfileImageUrl = u.ProfileImageUrl,
+                    About = u.About,
+                    //  בדיקה האם המשתמש מחובר כרגע ב-SignalR
+                    IsOnline = !string.IsNullOrEmpty(ChatHub.GetConnectionIdForUser(u.Id.ToString()))
+                });
+
+            return Ok(userDtos);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<UserResponseDto>> GetUser(Guid id)
+        {
+            var user = await _userRepository.GetByIdAsync(id);
+
+            if (user == null)
+            {
+                return NotFound("המשתמש לא נמצא");
+            }
+
+            return Ok(new UserResponseDto
+            {
+                Id = user.Id,
+                PhoneNumber = user.PhoneNumber,
+                DisplayName = user.DisplayName,
+                ProfileImageUrl = user.ProfileImageUrl,
+                About = user.About,
+                IsOnline = !string.IsNullOrEmpty(ChatHub.GetConnectionIdForUser(user.Id.ToString()))
+            });
+        }
+    }
+}
+</file>
+
+<file path="Data/DataContext.cs">
+using Microsoft.EntityFrameworkCore;
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Data
+{
+    public class DataContext : DbContext
+    {
+        public DataContext(DbContextOptions<DataContext> options) : base(options)
+        {
+        }
+
+        public DbSet<User> Users { get; set; } = null!;
+        public DbSet<Message> Messages { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            // 1. הגדרת קשר: שולח ההודעה -> מקושר ל-SentMessages של המשתמש
+            builder.Entity<Message>()
+                .HasOne(m => m.Sender)
+                .WithMany(u => u.SentMessages) // חיבור מפורש לרשימת ההודעות שנשלחו
+                .HasForeignKey(m => m.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 2. הגדרת קשר: מקבל ההודעה -> מקושר ל-ReceivedMessages של המשתמש
+            builder.Entity<Message>()
+                .HasOne(m => m.Recipient)
+                .WithMany(u => u.ReceivedMessages) // חיבור מפורש לרשימת ההודעות שהתקבלו
+                .HasForeignKey(m => m.RecipientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 3. הגדרת אינדקס ייחודי למספר הטלפון (מונע כפילויות ברישום)
+            builder.Entity<User>()
+                .HasIndex(u => u.PhoneNumber)
+                .IsUnique();
+        }
+    }
+}
+</file>
+
+<file path="DTOs/CreateMessageDto.cs">
+namespace WhatsappWeb.Api.DTOs
+{
+    public class CreateMessageDto
+    {
+        public Guid RecipientId { get; set; }
+        public string Content { get; set; } = string.Empty;
+    }
+}
+</file>
+
+<file path="DTOs/FileUploadDto.cs">
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
+
+namespace WhatsappWeb.Api.DTOs
+{
+    public class FileUploadDto
+    {
+        [Required(ErrorMessage = "חובה לצרף קובץ")]
+        public IFormFile File { get; set; } = null!;
+
+        [Required(ErrorMessage = "מזהה הנמען הוא שדה חובה")]
+        public Guid RecipientId { get; set; }
+    }
+}
+</file>
+
+<file path="DTOs/LoginDto.cs">
+using System.ComponentModel.DataAnnotations;
+
+namespace WhatsappWeb.Api.DTOs
+{
+    public class LoginDto
+    {
+        [Required(ErrorMessage = "מספר טלפון הוא שדה חובה")]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "סיסמה היא שדה חובה")]
+        public string Password { get; set; } = string.Empty;
+    }
+}
+</file>
+
+<file path="DTOs/MessageDto.cs">
+namespace WhatsappWeb.Api.DTOs
+{
+    public class MessageDto
+    {
+        public Guid Id { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public bool IsRead { get; set; }
+        public Guid SenderId { get; set; }
+        public Guid ReceiverId { get; set; }
+
+    }
+}
+</file>
+
+<file path="DTOs/MessageResponseDto.cs">
+namespace WhatsappWeb.Api.DTOs
+{
+    public class MessageResponseDto
+    {
+        public Guid Id { get; set; }
+        public Guid SenderId { get; set; }
+        public Guid RecipientId { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public DateTime SentAt { get; set; }
+        public bool IsRead { get; set; }
+        public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? FileType { get; set; }
+    }
+}
+</file>
+
+<file path="DTOs/RegisterDto.cs">
+using System.ComponentModel.DataAnnotations;
+
+namespace WhatsappWeb.Api.DTOs
+{
+    public class RegisterDto
+    {
+        [Required(ErrorMessage = "מספר טלפון הוא שדה חובה")]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "שם תצוגה הוא שדה חובה")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "סיסמה היא שדה חובה")]
+        [MinLength(6, ErrorMessage = "הסיסמה חייבת להכיל לפחות 6 תווים")]
+        public string Password { get; set; } = string.Empty;
+    }
+}
+</file>
+
+<file path="DTOs/SendMessageDto.cs">
+using System.ComponentModel.DataAnnotations;
+
+namespace WhatsappWeb.Api.DTOs
+{
+    public class SendMessageDto
+    {
+        [Required]
+        public Guid ReceiverId { get; set; }
+
+        [Required(ErrorMessage = "תוכן ההודעה אינו יכול להיות ריק")]
+        public string Content { get; set; } = string.Empty;
+    }
+}
+</file>
+
+<file path="DTOs/UserResponseDto.cs">
+namespace WhatsappWeb.Api.DTOs
+{
+    public class UserResponseDto
+    {
+        public Guid Id { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string? ProfileImageUrl { get; set; }
+        public string? About { get; set; }
+        public bool IsOnline { get; set; } 
+        public string Token { get; set; } = string.Empty;
+    }
+}
+</file>
+
+<file path="Hubs/ChatHub.cs">
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
+
+namespace WhatsappWeb.Api.Hubs
+{
+    [Authorize]
+    public class ChatHub : Hub
+    {
+        private static readonly Dictionary<string, string> ConnectedUsers = new(StringComparer.OrdinalIgnoreCase);
+
+        public override async Task OnConnectedAsync()
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                lock (ConnectedUsers)
+                {
+                    ConnectedUsers[userId] = Context.ConnectionId;
+                }
+
+                await Clients.Others.SendAsync("UserConnected", userId);
+            }
+
+            await base.OnConnectedAsync();
+        }
+
+        public override async Task OnDisconnectedAsync(Exception? exception)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                lock (ConnectedUsers)
+                {
+                    ConnectedUsers.Remove(userId);
+                }
+
+                await Clients.Others.SendAsync("UserDisconnected", userId);
+            }
+
+            await base.OnDisconnectedAsync(exception);
+        }
+
+        public static string? GetConnectionIdForUser(string userId)
+        {
+            lock (ConnectedUsers)
+            {
+                return ConnectedUsers.TryGetValue(userId, out var connectionId) ? connectionId : null;
+            }
+        }
+    }
+}
+</file>
+
+<file path="Migrations/20260721111227_InitialCreate.cs">
+using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace WhatsappWeb.Api.Migrations
+{
+    /// <inheritdoc />
+    public partial class InitialCreate : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: "Users",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    PhoneNumber = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    DisplayName = table.Column<string>(type: "TEXT", nullable: false),
+                    PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
+                    ProfileImageUrl = table.Column<string>(type: "TEXT", nullable: true),
+                    About = table.Column<string>(type: "TEXT", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Users", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Messages",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    SenderId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    RecipientId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Content = table.Column<string>(type: "TEXT", nullable: false),
+                    SentAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    IsRead = table.Column<bool>(type: "INTEGER", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    UserId1 = table.Column<Guid>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Messages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Messages_Users_RecipientId",
+                        column: x => x.RecipientId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Messages_Users_SenderId",
+                        column: x => x.SenderId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Messages_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_Messages_Users_UserId1",
+                        column: x => x.UserId1,
+                        principalTable: "Users",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_RecipientId",
+                table: "Messages",
+                column: "RecipientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_SenderId",
+                table: "Messages",
+                column: "SenderId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_UserId",
+                table: "Messages",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_UserId1",
+                table: "Messages",
+                column: "UserId1");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: "Messages");
+
+            migrationBuilder.DropTable(
+                name: "Users");
+        }
+    }
+}
+</file>
+
+<file path="Migrations/20260721111227_InitialCreate.Designer.cs">
+// <auto-generated />
+using System;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using WhatsappWeb.Api.Data;
+
+#nullable disable
+
+namespace WhatsappWeb.Api.Migrations
+{
+    [DbContext(typeof(DataContext))]
+    [Migration("20260721111227_InitialCreate")]
+    partial class InitialCreate
+    {
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        {
+#pragma warning disable 612, 618
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UserId1")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("SenderId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId1");
+
+                    b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("About")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileImageUrl")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("WhatsappWeb.Api.Models.User", null)
+                        .WithMany("ReceivedMessages")
+                        .HasForeignKey("UserId");
+
+                    b.HasOne("WhatsappWeb.Api.Models.User", null)
+                        .WithMany("SentMessages")
+                        .HasForeignKey("UserId1");
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Navigation("ReceivedMessages");
+
+                    b.Navigation("SentMessages");
+                });
+#pragma warning restore 612, 618
+        }
+    }
+}
+</file>
+
+<file path="Migrations/20260727212459_AddFileFieldsToMessage.cs">
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace WhatsappWeb.Api.Migrations
+{
+    /// <inheritdoc />
+    public partial class AddFileFieldsToMessage : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Messages_Users_UserId",
+                table: "Messages");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Messages_Users_UserId1",
+                table: "Messages");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Messages_UserId",
+                table: "Messages");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Messages_UserId1",
+                table: "Messages");
+
+            migrationBuilder.RenameColumn(
+                name: "UserId1",
+                table: "Messages",
+                newName: "FileUrl");
+
+            migrationBuilder.RenameColumn(
+                name: "UserId",
+                table: "Messages",
+                newName: "FileType");
+
+            migrationBuilder.AddColumn<string>(
+                name: "FileName",
+                table: "Messages",
+                type: "TEXT",
+                nullable: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_PhoneNumber",
+                table: "Users",
+                column: "PhoneNumber",
+                unique: true);
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropIndex(
+                name: "IX_Users_PhoneNumber",
+                table: "Users");
+
+            migrationBuilder.DropColumn(
+                name: "FileName",
+                table: "Messages");
+
+            migrationBuilder.RenameColumn(
+                name: "FileUrl",
+                table: "Messages",
+                newName: "UserId1");
+
+            migrationBuilder.RenameColumn(
+                name: "FileType",
+                table: "Messages",
+                newName: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_UserId",
+                table: "Messages",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_UserId1",
+                table: "Messages",
+                column: "UserId1");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Messages_Users_UserId",
+                table: "Messages",
+                column: "UserId",
+                principalTable: "Users",
+                principalColumn: "Id");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Messages_Users_UserId1",
+                table: "Messages",
+                column: "UserId1",
+                principalTable: "Users",
+                principalColumn: "Id");
+        }
+    }
+}
+</file>
+
+<file path="Migrations/20260727212459_AddFileFieldsToMessage.Designer.cs">
+// <auto-generated />
+using System;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using WhatsappWeb.Api.Data;
+
+#nullable disable
+
+namespace WhatsappWeb.Api.Migrations
+{
+    [DbContext(typeof(DataContext))]
+    [Migration("20260727212459_AddFileFieldsToMessage")]
+    partial class AddFileFieldsToMessage
+    {
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        {
+#pragma warning disable 612, 618
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("SenderId");
+
+                    b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("About")
+                        .HasMaxLength(150)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileImageUrl")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Recipient")
+                        .WithMany("ReceivedMessages")
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Sender")
+                        .WithMany("SentMessages")
+                        .HasForeignKey("SenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Navigation("ReceivedMessages");
+
+                    b.Navigation("SentMessages");
+                });
+#pragma warning restore 612, 618
+        }
+    }
+}
+</file>
+
+<file path="Migrations/DataContextModelSnapshot.cs">
+// <auto-generated />
+using System;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using WhatsappWeb.Api.Data;
+
+#nullable disable
+
+namespace WhatsappWeb.Api.Migrations
+{
+    [DbContext(typeof(DataContext))]
+    partial class DataContextModelSnapshot : ModelSnapshot
+    {
+        protected override void BuildModel(ModelBuilder modelBuilder)
+        {
+#pragma warning disable 612, 618
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("SenderId");
+
+                    b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("About")
+                        .HasMaxLength(150)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileImageUrl")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.Message", b =>
+                {
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Recipient")
+                        .WithMany("ReceivedMessages")
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("WhatsappWeb.Api.Models.User", "Sender")
+                        .WithMany("SentMessages")
+                        .HasForeignKey("SenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
+                });
+
+            modelBuilder.Entity("WhatsappWeb.Api.Models.User", b =>
+                {
+                    b.Navigation("ReceivedMessages");
+
+                    b.Navigation("SentMessages");
+                });
+#pragma warning restore 612, 618
+        }
+    }
+}
+</file>
+
+<file path="Models/Message.cs">
+// Models/Message.cs
+using System.ComponentModel.DataAnnotations;
+
+namespace WhatsappWeb.Api.Models
+{
+    public class Message
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid SenderId { get; set; }
+        public User? Sender { get; set; }
+        public Guid RecipientId { get; set; }
+        public User? Recipient { get; set; }
+
+        [Required]
+        public string Content { get; set; } = string.Empty;
+        public DateTime SentAt { get; set; } = DateTime.UtcNow;
+        public bool IsRead { get; set; } = false;
+
+        //  שדות לקבצים
+        public string? FileUrl { get; set; }
+        public string? FileName { get; set; }
+        public string? FileType { get; set; }
+    }
+}
+</file>
+
+<file path="Models/User.cs">
+using System.ComponentModel.DataAnnotations;
+
+namespace WhatsappWeb.Api.Models
+{
+    public class User
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        [Required]
+        [MaxLength(20)]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(50)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required]
+        public string PasswordHash { get; set; } = string.Empty;
+        public string? ProfileImageUrl { get; set; }
+
+        [MaxLength(150)]
+        public string? About { get; set; } = "Hey there! I am using WhatsApp.";
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // קשרי גומלין (Navigation Properties)
+        public ICollection<Message> SentMessages { get; set; } = new List<Message>();
+        public ICollection<Message> ReceivedMessages { get; set; } = new List<Message>();
+    }
+}
+</file>
+
+<file path="Program.cs">
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using WhatsappWeb.Api.Data;
+using WhatsappWeb.Api.Hubs;
+using WhatsappWeb.Api.Repositories;
+using WhatsappWeb.Api.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// --- 1. שירותי ליבה (Controllers & Swagger) ---
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// --- 2. חיבור לבסיס הנתונים (SQLite) ---
+builder.Services.AddDbContext<DataContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? "Data Source=whatsapp.db"));
+
+// --- 3. הזרקת תלויות (Dependency Injection) ---
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IMessageService, MessageService>(); 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IFileService, FileService>();
+
+// --- 4. הגדרת SignalR ---
+builder.Services.AddSignalR();
+
+// --- 5. הגדרת אימות ואבטחה (JWT Authentication) ---
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "super_secret_key_whatsapp_web_clone_123456!";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+
+        // טיפול מיוחד ב-SignalR: העברת הטוקן ב-Query String בזמן הידוק חיבור WebSocket
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/chat"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+// --- 6. הגדרת CORS עבור צד הלקוח (Angular) ---
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("CorsPolicy", policy =>
+    {
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials(); // חובה עבור SignalR (WebSockets)
+    });
+});
+
+var app = builder.Build();
+
+// --- 7. הגדרת צינור הבקשות (HTTP Request Pipeline / Middleware) ---
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseCors("CorsPolicy");
+app.UseStaticFiles(); // הוספת תמיכה בהגשת קבצים
+app.UseAuthentication(); //  מזהה מי המשתמש
+app.UseAuthorization();  //  בודק אם יש לו הרשאה
+
+app.MapControllers(); 
+
+// מיפוי ה-SignalR Hub
+app.MapHub<ChatHub>("/hubs/chat");
+
+// --- 8. יצירה/עדכון אוטומטי של בסיס הנתונים בהפעלה ---
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<DataContext>();
+    context.Database.Migrate();
+}
+
+app.Run();
+</file>
+
+<file path="Repositories/IMessageRepository.cs">
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Repositories
+{
+    public interface IMessageRepository
+    {
+        Task AddAsync(Message message);
+        Task<IEnumerable<Message>> GetChatHistoryAsync(Guid currentUserId, Guid otherUserId);
+        Task<bool> SaveChangesAsync();
+    }
+}
+</file>
+
+<file path="Repositories/IUserRepository.cs">
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Repositories
+{
+    public interface IUserRepository
+    {
+        Task<User?> GetByIdAsync(Guid id);
+        Task<User?> GetByPhoneNumberAsync(string phoneNumber);
+        Task<IEnumerable<User>> GetAllAsync();
+        Task<bool> UserExistsAsync(string phoneNumber);
+        Task AddAsync(User user);
+        Task<bool> SaveChangesAsync();
+    }
+}
+</file>
+
+<file path="Repositories/MessageRepository.cs">
+using Microsoft.EntityFrameworkCore;
+using WhatsappWeb.Api.Data;
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Repositories
+{
+    public class MessageRepository : IMessageRepository
+    {
+        private readonly DataContext _context;
+
+        public MessageRepository(DataContext context)
+        {
+            _context = context;
+        }
+
+        public async Task AddAsync(Message message)
+        {
+            await _context.Messages.AddAsync(message);
+        }
+
+        public async Task<IEnumerable<Message>> GetChatHistoryAsync(Guid currentUserId, Guid otherUserId)
+        {
+            return await _context.Messages
+                .Where(m => (m.SenderId == currentUserId && m.RecipientId == otherUserId) ||
+                            (m.SenderId == otherUserId && m.RecipientId == currentUserId))
+                .OrderBy(m => m.SentAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> SaveChangesAsync()
+        {
+            return await _context.SaveChangesAsync() > 0;
+        }
+    }
+}
+</file>
+
+<file path="Repositories/UserRepository.cs">
+using Microsoft.EntityFrameworkCore;
+using WhatsappWeb.Api.Data;
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Repositories
+{
+    public class UserRepository : IUserRepository
+    {
+        private readonly DataContext _context;
+
+        public UserRepository(DataContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<User?> GetByIdAsync(Guid id)
+        {
+            return await _context.Users.FindAsync(id);
+        }
+
+        public async Task<User?> GetByPhoneNumberAsync(string phoneNumber)
+        {
+            return await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
+        }
+
+        public async Task<IEnumerable<User>> GetAllAsync()
+        {
+            return await _context.Users.ToListAsync();
+        }
+
+        public async Task<bool> UserExistsAsync(string phoneNumber)
+        {
+            return await _context.Users.AnyAsync(u => u.PhoneNumber == phoneNumber);
+        }
+
+        public async Task AddAsync(User user)
+        {
+            await _context.Users.AddAsync(user);
+        }
+
+        public async Task<bool> SaveChangesAsync()
+        {
+            return await _context.SaveChangesAsync() > 0;
+        }
+    }
+}
+</file>
+
+<file path="Services/AuthService.cs">
+using BCrypt.Net;
+using WhatsappWeb.Api.DTOs;
+using WhatsappWeb.Api.Models;
+using WhatsappWeb.Api.Repositories;
+
+namespace WhatsappWeb.Api.Services
+{
+    public class AuthService : IAuthService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly ITokenService _tokenService;
+
+        public AuthService(IUserRepository userRepository, ITokenService tokenService)
+        {
+            _userRepository = userRepository;
+            _tokenService = tokenService;
+        }
+
+        public async Task<UserResponseDto?> RegisterAsync(RegisterDto registerDto)
+        {
+            // 1. בדיקה אם המשתמש כבר קיים
+            if (await _userRepository.UserExistsAsync(registerDto.PhoneNumber))
+            {
+                return null;
+            }
+
+            // 2. הצפנת הסיסמה ב-BCrypt
+            string passwordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password);
+
+            // 3. יצירת המשתמש
+            var user = new User
+            {
+                PhoneNumber = registerDto.PhoneNumber,
+                DisplayName = registerDto.DisplayName,
+                PasswordHash = passwordHash
+            };
+
+            // 4. שמירה במסד הנתונים
+            await _userRepository.AddAsync(user);
+            if (!await _userRepository.SaveChangesAsync())
+            {
+                return null;
+            }
+
+            // 5. החזרת תשובה נקייה כולל הטוקן
+            return new UserResponseDto
+            {
+                Id = user.Id,
+                PhoneNumber = user.PhoneNumber,
+                DisplayName = user.DisplayName,
+                ProfileImageUrl = user.ProfileImageUrl,
+                About = user.About,
+                Token = _tokenService.CreateToken(user)
+            };
+        }
+
+        public async Task<UserResponseDto?> LoginAsync(LoginDto loginDto)
+        {
+            // 1. שליפת המשתמש לפי מספר טלפון
+            var user = await _userRepository.GetByPhoneNumberAsync(loginDto.PhoneNumber);
+            if (user == null)
+            {
+                return null;
+            }
+
+            // 2. אימות הסיסמה
+            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash);
+            if (!isPasswordValid)
+            {
+                return null;
+            }
+
+            // 3. החזרת ה-DTO עם הטוקן
+            return new UserResponseDto
+            {
+                Id = user.Id,
+                PhoneNumber = user.PhoneNumber,
+                DisplayName = user.DisplayName,
+                ProfileImageUrl = user.ProfileImageUrl,
+                About = user.About,
+                Token = _tokenService.CreateToken(user)
+            };
+        }
+    }
+}
+</file>
+
+<file path="Services/FileService.cs">
+// Services/FileService.cs
+namespace WhatsappWeb.Api.Services
+{
+    public class FileService : IFileService
+    {
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        public FileService(IHttpContextAccessor httpContextAccessor)
+        {
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        public async Task<string> SaveFileAsync(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                throw new ArgumentException("קובץ לא תקין.");
+            }
+
+            // 1. יצירת נתיב התיקייה
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploadsFolder))
+            {
+                Directory.CreateDirectory(uploadsFolder);
+            }
+
+            // 2. יצירת שם ייחודי ושמירה לדיסק
+            var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // 3. בניית ה-URL הציבורי
+            var request = _httpContextAccessor.HttpContext?.Request;
+            var baseUrl = $"{request?.Scheme}://{request?.Host}";
+
+            return $"{baseUrl}/uploads/{uniqueFileName}";
+        }
+    }
+}
+</file>
+
+<file path="Services/IAuthService.cs">
+using WhatsappWeb.Api.DTOs;
+
+namespace WhatsappWeb.Api.Services
+{
+    public interface IAuthService
+    {
+        Task<UserResponseDto?> RegisterAsync(RegisterDto registerDto);
+        Task<UserResponseDto?> LoginAsync(LoginDto loginDto);
+    }
+}
+</file>
+
+<file path="Services/IFileService.cs">
+// Services/IFileService.cs
+namespace WhatsappWeb.Api.Services
+{
+    public interface IFileService
+    {
+        Task<string> SaveFileAsync(IFormFile file);
+    }
+}
+</file>
+
+<file path="Services/IMessageService.cs">
+using WhatsappWeb.Api.DTOs;
+
+namespace WhatsappWeb.Api.Services
+{
+    public interface IMessageService
+    {
+        Task<MessageResponseDto?> SendTextMessageAsync(Guid senderId, CreateMessageDto createDto);
+        Task<MessageResponseDto?> SendFileAsync(Guid senderId, FileUploadDto fileDto);
+        Task<IEnumerable<MessageResponseDto>> GetChatHistoryAsync(Guid currentUserId, Guid otherUserId);
+    }
+}
+</file>
+
+<file path="Services/ITokenService.cs">
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Services
+{
+    public interface ITokenService
+    {
+        string CreateToken(User user);
+    }
+}
+</file>
+
+<file path="Services/MessageService.cs">
+using Microsoft.AspNetCore.SignalR;
+using WhatsappWeb.Api.DTOs;
+using WhatsappWeb.Api.Hubs;
+using WhatsappWeb.Api.Models;
+using WhatsappWeb.Api.Repositories;
+
+namespace WhatsappWeb.Api.Services
+{
+    public class MessageService : IMessageService
+    {
+        private readonly IMessageRepository _messageRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IFileService _fileService;
+        private readonly IHubContext<ChatHub> _hubContext;
+
+        public MessageService(
+            IMessageRepository messageRepository,
+            IUserRepository userRepository,
+            IFileService fileService,
+            IHubContext<ChatHub> hubContext)
+        {
+            _messageRepository = messageRepository;
+            _userRepository = userRepository;
+            _fileService = fileService;
+            _hubContext = hubContext;
+        }
+
+        public async Task<MessageResponseDto?> SendTextMessageAsync(Guid senderId, CreateMessageDto createDto)
+        {
+            var recipient = await _userRepository.GetByIdAsync(createDto.RecipientId);
+            if (recipient == null) return null;
+
+            var message = new Message
+            {
+                SenderId = senderId,
+                RecipientId = createDto.RecipientId,
+                Content = createDto.Content,
+                SentAt = DateTime.UtcNow
+            };
+
+            await _messageRepository.AddAsync(message);
+            if (!await _messageRepository.SaveChangesAsync()) return null;
+
+            var responseDto = MapToResponseDto(message);
+
+            // שידור בזמן אמת ב-SignalR
+            await SendSignalRNotificationAsync(createDto.RecipientId, responseDto);
+
+            return responseDto;
+        }
+
+        public async Task<MessageResponseDto?> SendFileAsync(Guid senderId, FileUploadDto fileDto)
+        {
+            var recipient = await _userRepository.GetByIdAsync(fileDto.RecipientId);
+            if (recipient == null) return null;
+
+            // שמירת הקובץ על הדיסק לקבלת ה-URL
+            string fileUrl = await _fileService.SaveFileAsync(fileDto.File);
+
+            var message = new Message
+            {
+                SenderId = senderId,
+                RecipientId = fileDto.RecipientId,
+                Content = fileDto.File.FileName,
+                FileUrl = fileUrl,
+                FileName = fileDto.File.FileName,
+                FileType = fileDto.File.ContentType,
+                SentAt = DateTime.UtcNow
+            };
+
+            await _messageRepository.AddAsync(message);
+            if (!await _messageRepository.SaveChangesAsync()) return null;
+
+            var responseDto = MapToResponseDto(message);
+
+            // שידור בזמן אמת ב-SignalR
+            await SendSignalRNotificationAsync(fileDto.RecipientId, responseDto);
+
+            return responseDto;
+        }
+
+        public async Task<IEnumerable<MessageResponseDto>> GetChatHistoryAsync(Guid currentUserId, Guid otherUserId)
+        {
+            var messages = await _messageRepository.GetChatHistoryAsync(currentUserId, otherUserId);
+            return messages.Select(MapToResponseDto);
+        }
+
+        private static MessageResponseDto MapToResponseDto(Message message)
+        {
+            return new MessageResponseDto
+            {
+                Id = message.Id,
+                SenderId = message.SenderId,
+                RecipientId = message.RecipientId,
+                Content = message.Content,
+                SentAt = message.SentAt,
+                IsRead = message.IsRead,
+                FileUrl = message.FileUrl,
+                FileName = message.FileName,
+                FileType = message.FileType
+            };
+        }
+
+        private async Task SendSignalRNotificationAsync(Guid recipientId, MessageResponseDto responseDto)
+        {
+            var recipientConnectionId = ChatHub.GetConnectionIdForUser(recipientId.ToString());
+            if (!string.IsNullOrEmpty(recipientConnectionId))
+            {
+                await _hubContext.Clients.Client(recipientConnectionId)
+                    .SendAsync("ReceiveMessage", responseDto);
+            }
+        }
+    }
+}
+</file>
+
+<file path="Services/TokenService.cs">
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using WhatsappWeb.Api.Models;
+
+namespace WhatsappWeb.Api.Services
+{
+    public class TokenService : ITokenService
+    {
+        private readonly SymmetricSecurityKey _key;
+
+        public TokenService(IConfiguration config)
+        {
+            var tokenKey = config["Jwt:Key"]
+                ?? "super_secret_key_whatsapp_web_clone_123456!";
+            _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
+        }
+
+        public string CreateToken(User user)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.DisplayName),
+                new Claim(ClaimTypes.MobilePhone, user.PhoneNumber)
+            };
+
+            var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256Signature);
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.UtcNow.AddDays(7),
+                SigningCredentials = creds
+            };
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+
+            return tokenHandler.WriteToken(token);
+        }
+    }
+}
+</file>
+
+<file path="WeatherForecast.cs">
+namespace WhatsappWeb.Api
+{
+    public class WeatherForecast
+    {
+        public DateOnly Date { get; set; }
+
+        public int TemperatureC { get; set; }
+
+        public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+
+        public string? Summary { get; set; }
+    }
+}
+</file>
+
+<file path="WhatsappWeb.Api.csproj">
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.11">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+  </ItemGroup>
+
+</Project>
+</file>
+
+<file path="WhatsappWeb.Api.sln">
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35013.160
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WhatsappWeb.Api", "WhatsappWeb.Api.csproj", "{742AE22E-512F-4A25-9D56-235E2CF68F27}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{742AE22E-512F-4A25-9D56-235E2CF68F27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{742AE22E-512F-4A25-9D56-235E2CF68F27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{742AE22E-512F-4A25-9D56-235E2CF68F27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{742AE22E-512F-4A25-9D56-235E2CF68F27}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3E442C58-93C1-44AF-9CE1-601B4CDB4944}
+	EndGlobalSection
+EndGlobal
+</file>
+
+</files>
