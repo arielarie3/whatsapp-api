@@ -7,7 +7,13 @@ using WhatsappWeb.Api.Hubs;
 using WhatsappWeb.Api.Repositories;
 using WhatsappWeb.Api.Services;
 
+Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "1");
+Environment.SetEnvironmentVariable("DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE", "false");
+
 var builder = WebApplication.CreateBuilder(args);
+
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 // --- 1. שירותי ליבה (Controllers & Swagger) ---
 builder.Services.AddControllers();
@@ -32,7 +38,10 @@ builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddSignalR();
 
 // --- 5. הגדרת אימות ואבטחה (JWT Authentication) ---
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "super_secret_key_whatsapp_web_clone_123456!";
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? builder.Configuration["TokenKey"]
+    ?? "super_secret_key_whatsapp_web_clone_123456!"; 
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -65,21 +74,19 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials(); // חובה עבור SignalR (WebSockets)
+        policy.SetIsOriginAllowed(_ => true) // מאפשר לכל מקור לפנות לשרת
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
 // --- 7. הגדרת צינור הבקשות (HTTP Request Pipeline / Middleware) ---
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 app.UseCors("CorsPolicy");
 app.UseStaticFiles(); // הוספת תמיכה בהגשת קבצים
