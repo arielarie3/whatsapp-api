@@ -12,6 +12,10 @@ RUN dotnet publish "WhatsappWeb.Api.csproj" -c Release -o /app/publish /p:UseApp
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
+# ?? הגדרות קריטיות לענן שמונעות את קריסת ה-inotify
+ENV DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+
 COPY --from=build /app/publish .
 
 ENTRYPOINT ["dotnet", "WhatsappWeb.Api.dll"]
