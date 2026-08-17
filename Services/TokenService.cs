@@ -13,7 +13,9 @@ namespace WhatsappWeb.Api.Services
         public TokenService(IConfiguration config)
         {
             var tokenKey = config["Jwt:Key"]
+                ?? config["TokenKey"]
                 ?? "super_secret_key_whatsapp_web_clone_123456!";
+
             _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
         }
 
