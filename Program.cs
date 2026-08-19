@@ -22,8 +22,7 @@ builder.Services.AddSwaggerGen();
 
 // --- 2. חיבור לבסיס הנתונים (SQLite) ---
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Data Source=whatsapp.db"));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // --- 3. הזרקת תלויות (Dependency Injection) ---
 builder.Services.AddScoped<IUserRepository, UserRepository>();
